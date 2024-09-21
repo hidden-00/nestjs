@@ -52,4 +52,9 @@ export class AuthController {
     await this.authService.logout(username);
     return { message: 'Logout successful' };
   }
+
+  @Post('register')
+  async register(@Body() loginDto: LoginDto) {
+    return this.authService.register(loginDto);
+  }
 }

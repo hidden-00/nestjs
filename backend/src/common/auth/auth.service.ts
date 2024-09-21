@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/modules/user/user.service';
 import * as bcrypt from 'bcrypt';
 import { User } from 'src/modules/user/user.entity';
+import { LoginDto } from './dtos/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -11,6 +12,32 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
   ) {}
+
+  async register(loginDto: LoginDto) {
+    const user = await this.userService.findUserByUsername(loginDto.username);
+    if (user) {
+      throw new UnauthorizedException('User already exists');
+    }
+    const newUser = await this.userService.createUser(loginDto);
+    const payload = {
+      username: newUser.username,
+      sub: newUser.id,
+      roles: newUser.roles,
+    };
+    const accessToken = this.jwtService.sign(payload);
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.REFRESH_SECRET,
+      expiresIn: process.env.REFRESH_EXPIRES_IN,
+    });
+    await this.userService.updateRefreshToken(
+      newUser.username,
+      await bcrypt.hash(refreshToken, 10),
+    );
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
+  }
 
   async validateUser(
     username: string,
@@ -25,7 +52,11 @@ export class AuthService {
   }
 
   async login(user: Partial<User>) {
-    const payload = { username: user.username, sub: user.id, role: user.roles };
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      roles: user.roles,
+    };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
       secret: process.env.REFRESH_SECRET,
